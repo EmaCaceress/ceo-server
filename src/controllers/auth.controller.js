@@ -7,11 +7,11 @@ const generateToken = () => crypto.randomBytes(48).toString("hex");
 export const login = async (req, res) => {
   const { username, password } = req.body ?? {};
 
-  console.log("Intento de login:", username);
+  
   if (!username || !password) {
     return res.status(400).json({ error: "Falta username o password" });
   }
-
+  console.log("Intento de login:", username);
   try {
     // 1) buscar usuario
     const userRes = await pool.query(

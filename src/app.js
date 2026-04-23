@@ -82,11 +82,14 @@ app.post("/refresh", async (req, res) => {
                 url = link + identity;
             } else{
                 const identityBd = await pool.query("SELECT id FROM nodos WHERE nodo = $1", [nodo]);
-                if(identityBd.rows.length === 0) {
-                    throw new Error("Nodo no encontrado");
+                if (identityBd.rows.length === 0) {
+                    const error = new Error("Nodo no encontrado");
+                    error.status = 404;
+                    throw error;
                 }
                 url = link + identityBd.rows[0].id;
             }
+
             return url;
         }
         //Refrescar imagen
@@ -105,13 +108,19 @@ app.post("/refresh", async (req, res) => {
           
         //Devolvemos imagen
         const resolve = await fetch(`${getBaseUrl()}/grafica/${username}`);
-        console.log("Fetch status:", resolve.url);
+        
+        if (!resolve.ok) {
+            const error = new Error("Servicio de gráficos no disponible");
+            error.status = 500;
+            throw error;
+        }
 
+        console.log("Fetch status:", resolve.url);
         return res.json({url: resolve.url});
     } catch(error) {
-        res.status(500).json({
+        res.status(error.status || 500).json({
             ok: false,
-            message: "Database connection failed",
+            message: "connection failed",
             error: error.message
         });
     }
