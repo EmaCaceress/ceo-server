@@ -81,7 +81,7 @@ app.post("/refresh", async (req, res) => {
             if(isNumber(identity)) {   
                 url = link + identity;
             } else{
-                const identityBd = await pool.query("SELECT id FROM nodos WHERE nodo = $1", [nodo]);
+                const identityBd = await pool.query("SELECT id FROM nodos WHERE nodo = $1", [nodo.toUpperCase()]);
                 if (identityBd.rows.length === 0) {
                     const error = new Error("Nodo no encontrado");
                     error.status = 404;

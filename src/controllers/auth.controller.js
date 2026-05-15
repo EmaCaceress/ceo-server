@@ -67,3 +67,27 @@ export const login = async (req, res) => {
     return res.status(500).json({ error: err.message });
   }
 };
+
+export const verifyToken = async (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  console.log("Verificando token:", token);
+  const tokenVerified = await pool.query(
+    "SELECT token, active FROM sessions WHERE token = $1",
+    [token]
+  );
+  console.log("Verificando token:", token);
+  // Si no se encuentra el token, o no es válido, se devuelve un error
+  if (tokenVerified.rowCount === 0) {
+    return res.status(401).json({ error: "Token inválido" });
+  }
+
+  const session = tokenVerified.rows[0];
+
+  // Si el token existe pero no está activo, se devuelve un error
+  if (!session.active) {
+    return res.status(401).json({ error: "Token inactivo" });
+  }
+  console.log("Token verificado:", token);
+  // Si el token es válido y activo, se devuelve el token y el rol del usuario
+  return res.json({ token: session.token, role: session.role });
+};
