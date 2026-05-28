@@ -106,7 +106,7 @@ export const getSpectrumGraph = async (req, res) => {
             error.status = 500;
             throw error;
         }
-        
+        console.log("URL de la gráfica:", resolve.url);
         return res.json({url: resolve.url});
     } catch(error) {
         res.status(error.status || 500).json({
