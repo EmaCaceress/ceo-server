@@ -72,7 +72,7 @@ export const verifyToken = async (req, res) => {
   const token = req.headers.authorization?.split(" ")[1];
   console.log("Verificando token:", token);
   const tokenVerified = await pool.query(
-    "SELECT token, active FROM sessions WHERE token = $1",
+    "SELECT token, active, user_id FROM sessions WHERE token = $1",
     [token]
   );
   console.log("Verificando token:", token);
@@ -87,7 +87,13 @@ export const verifyToken = async (req, res) => {
   if (!session.active) {
     return res.status(401).json({ error: "Token inactivo" });
   }
-  console.log("Token verificado:", token);
+  const role = (await pool.query(
+    "SELECT role FROM users WHERE id = $1",
+    [session.user_id])).rows[0].role;
+  console.log("Token verificado:", session.token);
+  console.log("Role del usuario:", role);
   // Si el token es válido y activo, se devuelve el token y el rol del usuario
-  return res.json({ token: session.token, role: session.role });
+  return res.json({ 
+    token: session.token, 
+    role: role });
 };
