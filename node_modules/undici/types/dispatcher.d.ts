@@ -2,7 +2,7 @@ import { URL } from 'node:url'
 import { Duplex, Readable, Writable } from 'node:stream'
 import { EventEmitter } from 'node:events'
 import { Blob } from 'node:buffer'
-import { IncomingHttpHeaders } from './header'
+import { IncomingHttpHeaders, OutgoingHttpHeaders } from './header'
 import BodyReadable from './readable'
 import { FormData } from './formdata'
 import Errors from './errors'
@@ -10,7 +10,7 @@ import { Autocomplete } from './utility'
 
 export default Dispatcher
 
-export type UndiciHeaders = Record<string, string | string[]> | IncomingHttpHeaders | string[] | Iterable<[string, string | string[] | undefined]> | null
+export type UndiciHeaders = OutgoingHttpHeaders | string[] | Iterable<[string, string | string[] | undefined]> | null
 
 /** Dispatcher is the core API used to dispatch requests. */
 declare class Dispatcher extends EventEmitter {
@@ -111,18 +111,16 @@ declare namespace Dispatcher {
     idempotent?: boolean;
     /** Whether the response is expected to take a long time and would end up blocking the pipeline. When this is set to `true` further pipelining will be avoided on the same connection until headers have been received. Defaults to `method !== 'HEAD'`. */
     blocking?: boolean;
-    /** The IP Type of Service (ToS) value for the request socket. Must be an integer between 0 and 255. Default: `0` */
+    /** The IP Type of Service (ToS) value for the request socket. Must be an integer between 0 and 255. */
     typeOfService?: number | null;
     /** Upgrade the request. Should be used to specify the kind of upgrade i.e. `'Websocket'`. Default: `method === 'CONNECT' || null`. */
     upgrade?: boolean | string | null;
-    /** The amount of time, in milliseconds, the parser will wait to receive the complete HTTP headers. Defaults to 300 seconds. */
+    /** The amount of time, in milliseconds, the parser will wait to receive the complete HTTP headers. Defaults to 300 seconds. HTTP/1.1 parser timeouts are not guaranteed to fire with exact millisecond precision: delays up to 1000ms use native timers, while larger delays use lower-overhead fast timers with a target resolution around 500ms. */
     headersTimeout?: number | null;
-    /** The timeout after which a request will time out, in milliseconds. Monitors time between receiving body data. Use 0 to disable it entirely. Defaults to 300 seconds. */
+    /** The timeout after which a request will time out, in milliseconds. Monitors time between receiving body data. Use 0 to disable it entirely. Defaults to 300 seconds. HTTP/1.1 parser timeouts are not guaranteed to fire with exact millisecond precision: delays up to 1000ms use native timers, while larger delays use lower-overhead fast timers with a target resolution around 500ms. */
     bodyTimeout?: number | null;
     /** Whether the request should stablish a keep-alive or not. Default `false` */
     reset?: boolean;
-    /** Whether Undici should throw an error upon receiving a 4xx or 5xx response from the server. Defaults to false */
-    throwOnError?: boolean;
     /** For H2, it appends the expect: 100-continue header, and halts the request body until a 100-continue is received from the remote server */
     expectContinue?: boolean;
   }
@@ -210,8 +208,8 @@ declare namespace Dispatcher {
     get aborted(): boolean
     get paused(): boolean
     get reason(): Error | null
-    rawHeaders?: Buffer[] | string[] | null
-    rawTrailers?: Buffer[] | string[] | null
+    rawHeaders?: Buffer[] | string[] | IncomingHttpHeaders | null
+    rawTrailers?: Buffer[] | string[] | IncomingHttpHeaders | null
     abort(reason: Error): void
     pause(): void
     resume(): void

@@ -6,7 +6,7 @@ const { IncomingMessage } = require('node:http')
 const stream = require('node:stream')
 const net = require('node:net')
 const { stringify } = require('node:querystring')
-const { EventEmitter: EE } = require('node:events')
+const { EventEmitter: EE, addAbortListener: addAbortListenerNative } = require('node:events')
 const timers = require('../util/timers')
 const { InvalidArgumentError, ConnectTimeoutError } = require('./errors')
 const { headerNameLowerCasedRecord } = require('./constants')
@@ -370,7 +370,12 @@ function destroy (stream, err) {
       stream.socket = null
     }
 
-    stream.destroy(err)
+    try {
+      stream.destroy(err)
+    } catch {
+      // stream.destroy may throw on managed sockets (e.g., http2).
+      // Silently ignore — the socket lifecycle is handled by the subsystem.
+    }
   } else if (err) {
     queueMicrotask(() => {
       stream.emit('error', err)
@@ -464,10 +469,30 @@ function parseHeaders (headers, obj) {
 }
 
 /**
- * @param {Buffer[]} headers
+ * @param {Buffer[] | string[] | Record<string, string | string[]> | null | undefined} headers
  * @returns {string[]}
  */
 function parseRawHeaders (headers) {
+  if (headers == null) {
+    return []
+  }
+
+  if (!Array.isArray(headers)) {
+    const rawHeaders = []
+
+    for (const [name, value] of Object.entries(headers)) {
+      if (Array.isArray(value)) {
+        for (const entry of value) {
+          rawHeaders.push(name, `${entry}`)
+        }
+      } else {
+        rawHeaders.push(name, `${value}`)
+      }
+    }
+
+    return rawHeaders
+  }
+
   const headersLength = headers.length
   /**
    * @type {string[]}
@@ -678,7 +703,11 @@ function isFormDataLike (object) {
 }
 
 function addAbortListener (signal, listener) {
-  if ('addEventListener' in signal) {
+  if (!signal || 'aborted' in signal) {
+    return addAbortListenerNative(signal, listener)[Symbol.dispose]
+  }
+
+  if (typeof signal.addEventListener === 'function') {
     signal.addEventListener('abort', listener, { once: true })
     return () => signal.removeEventListener('abort', listener)
   }
@@ -751,7 +780,7 @@ function isValidHeaderValue (characters) {
   return !headerCharRegex.test(characters)
 }
 
-const rangeHeaderRegex = /^bytes (\d+)-(\d+)\/(\d+)?$/
+const rangeHeaderRegex = /^bytes (\d+)-(\d+)\/(\d+|\*)?$/
 
 /**
  * @typedef {object} RangeHeader
@@ -768,13 +797,14 @@ const rangeHeaderRegex = /^bytes (\d+)-(\d+)\/(\d+)?$/
  */
 function parseRangeHeader (range) {
   if (range == null || range === '') return { start: 0, end: null, size: null }
+  if (!range) return null
 
-  const m = range ? range.match(rangeHeaderRegex) : null
+  const m = rangeHeaderRegex.exec(range)
   return m
     ? {
         start: parseInt(m[1]),
         end: m[2] ? parseInt(m[2]) : null,
-        size: m[3] ? parseInt(m[3]) : null
+        size: m[3] && m[3] !== '*' ? parseInt(m[3]) : null
       }
     : null
 }
@@ -894,11 +924,32 @@ function onConnectTimeout (socket, opts) {
   destroy(socket, new ConnectTimeoutError(message))
 }
 
+let lastUrlString = null
+let lastProtocol = null
+
 /**
  * @param {string} urlString
  * @returns {string}
  */
 function getProtocolFromUrlString (urlString) {
+  // Requests are typically dispatched against the same origin over and over,
+  // so cache the last (urlString, protocol) pair to skip re-parsing.
+  if (urlString === lastUrlString) {
+    return lastProtocol
+  }
+
+  const protocol = getProtocolFromUrlStringSlow(urlString)
+  lastUrlString = urlString
+  lastProtocol = protocol
+
+  return protocol
+}
+
+/**
+ * @param {string} urlString
+ * @returns {string}
+ */
+function getProtocolFromUrlStringSlow (urlString) {
   if (
     urlString[0] === 'h' &&
     urlString[1] === 't' &&
@@ -918,8 +969,10 @@ function getProtocolFromUrlString (urlString) {
   return urlString.slice(0, urlString.indexOf(':') + 1)
 }
 
-const kEnumerableProperty = Object.create(null)
-kEnumerableProperty.enumerable = true
+const kEnumerableProperty = {
+  __proto__: null,
+  enumerable: true
+}
 
 const normalizedMethodRecordsBase = {
   delete: 'DELETE',
@@ -933,7 +986,9 @@ const normalizedMethodRecordsBase = {
   post: 'POST',
   POST: 'POST',
   put: 'PUT',
-  PUT: 'PUT'
+  PUT: 'PUT',
+  query: 'QUERY',
+  QUERY: 'QUERY'
 }
 
 const normalizedMethodRecords = {

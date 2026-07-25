@@ -117,15 +117,120 @@ export const getSpectrumGraph = async (req, res) => {
     }
 };
 
-export const getSystemStatus = async (req, res) => {
-    try {
-        // Aquí iría la lógica para obtener el estado del sistema
-        const systemStatus = {
-            cpuUsage: "15%",
-            memoryUsage: "45%",
-            diskSpace: "120GB free of 500GB"
+export const getStats = async (req, res) => {
+    let nodo = req.body.nodo || "Unknown";
+    const token = req.headers.authorization?.split(" ")[1];
+    try{
+        
+        // Busca usuario admin_id a partir del token
+        const user = (await pool.query(
+            "SELECT s.user_id, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE token = $1",
+            [token])).rows[0] || null;
+    
+        if (user.user_id === 0) {
+            return res.status(404).json({ error: "No se encontraron usuarios" });
+        }
+        function isNumber(num) {
+            return /^[0-9]+$/.test(num);
+        }
+        
+        //tunel
+        const getBaseUrl = async () => {
+            let result;
+            
+            if (user.role == "admin") {
+                result = await pool.query(`
+                    SELECT secret_key
+                    FROM keys
+                    WHERE admin_id = $1
+                  `, [user.user_id]);
+            } else {
+                result = await pool.query(`
+                    SELECT k.secret_key
+                    FROM access a
+                    JOIN keys k
+                      ON a.key_id = k.id
+                    WHERE a.technician_id = $1
+                  `, [user.user_id]);
+            }
+              
+              const code = result.rows[0]?.secret_key
+            return `https://${code}.trycloudflare.com`;
         };
-        res.json(systemStatus);
+        console.log("Nodo recibido:", nodo);
+        //Refrescar estadísticas
+        const response = await fetch(`${(await getBaseUrl())}/estadisticas`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                nodo
+            })
+        });
+        
+        const data = await response.json();
+
+        console.log("Estadísticas obtenidas:", data);
+        res.json(data);
+    } catch (error) {
+        res.status(500).json({
+            ok: false,
+            message: "Failed to get system status",
+            error: error.message
+        });
+    }
+}
+
+export const getSuscribers = async (req, res) => {
+    const { nodo } = req.body;
+    const token = req.headers.authorization?.split(" ")[1];
+    try{
+        
+        // Busca usuario admin_id a partir del token
+        const user = (await pool.query(
+            "SELECT s.user_id, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE token = $1",
+            [token])).rows[0] || null;
+    
+        if (user.user_id === 0) {
+            return res.status(404).json({ error: "No se encontraron usuarios" });
+        }        
+        
+        //tunel
+        const getBaseUrl = async () => {
+            let result;
+            
+            if (user.role == "admin") {
+                result = await pool.query(`
+                    SELECT secret_key
+                    FROM keys
+                    WHERE admin_id = $1
+                  `, [user.user_id]);
+            } else {
+                result = await pool.query(`
+                    SELECT k.secret_key
+                    FROM access a
+                    JOIN keys k
+                      ON a.key_id = k.id
+                    WHERE a.technician_id = $1
+                  `, [user.user_id]);
+            }
+              
+              const code = result.rows[0]?.secret_key
+            return `https://${code}.trycloudflare.com`;
+        };
+
+        const response = await fetch(`${(await getBaseUrl())}/abonados/nodo`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                nodo
+            })
+        });
+        const data = await response.json();
+        res.json(data);
     } catch (error) {
         res.status(500).json({
             ok: false,
