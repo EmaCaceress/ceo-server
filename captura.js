@@ -615,11 +615,10 @@ app.post('/estadisticas', async (req, res) => {
   // Nota: "req.user" no existe porque no hay middleware de auth que lo
   // setee, así que esto siempre cae en 'usuario desconocido'. Se deja
   // documentado por si en algún momento se agrega autenticación.
-  const username = req.user?.username || 'usuario desconocido';
+  const username = req.body.username || 'usuario desconocido';
 
   console.log('-------------------------------');
-  console.log('🔄 Solicitud de refresco en monitoria recibida por:', username);
-  console.log('📡 Nodo solicitado:', nodo);
+  console.log("🔄 Consulta de monitoria en", nodo, "por:", username);
 
   if (!nodo) {
     return res.status(400).json({ error: 'Debe indicar un nodo' });
@@ -629,21 +628,22 @@ app.post('/estadisticas', async (req, res) => {
   // Si dos peticiones llegan al mismo tiempo para el mismo nodo, la
   // segunda espera en vez de disparar otra consulta en paralelo contra
   // Telecentro (mismo criterio que la sesión de /refrescar).
-  if (!sesionesEstadisticas[nodo]) {
-    sesionesEstadisticas[nodo] = { consultando: false };
+  if (!sesionesEstadisticas[username]) {
+    sesionesEstadisticas[username] = { consultando: false };
   }
 
-  const sesion = sesionesEstadisticas[nodo];
+  const sesion = sesionesEstadisticas[username];
 
   if (sesion.consultando) {
     return res.status(429).json({
-      error: `Ya hay una consulta en curso para el nodo ${nodo}, esperá unos segundos`,
+      error: `Ya tenés una consulta en curso, esperá unos segundos`,
     });
   }
 
   sesion.consultando = true;
 
   try {
+    console.log(`📊 Consulta de monitoria para el ${nodo} en proceso...`, new Date().toLocaleString());
     const filters = {
       groupOp: 'AND',
       rules: [
@@ -677,8 +677,10 @@ app.post('/estadisticas', async (req, res) => {
 
     if (!rows.length) {
       return res.status(404).json({
-        error: `No se encontraron estadísticas para el nodo ${nodo}`,
+        error: `❌ No se encontraron estadísticas para el nodo ${nodo}`,
       });
+    } else {
+      console.log(`✅ Se encontraron ${rows.length} filas de estadísticas para el nodo ${nodo}`);
     }
 
     const parsedRows = rows.map(parseRow);
@@ -727,8 +729,6 @@ app.post('/estadisticas', async (req, res) => {
       pwrUs: summarizeValues(parsedRows.map((row) => row.pwrUs)),
     };
 
-    console.log('✅ Monitoria actualizada:', statistics);
-
     return res.status(200).json(statistics);
   } catch (error) {
     console.error('❌ Error consultando monitoria:', error);
@@ -746,10 +746,10 @@ app.post('/estadisticas', async (req, res) => {
 // Suscribers en React.
 app.post('/abonados/nodo', async (req, res) => {
   const nodo = String(req.body.nodo || '').trim().toUpperCase();
-  const username = req.user?.username || 'usuario desconocido';
+  const username = req.body.username || 'usuario desconocido';
 
   console.log('-------------------------------');
-  console.log("Consulta de", nodo, "por: ", username);
+  console.log("🔄 Consulta de abonados en", nodo, "por:", username);
 
   if (!nodo) {
     return res.status(400).json({ error: 'Debe indicar un nodo' });
@@ -767,14 +767,17 @@ app.post('/abonados/nodo', async (req, res) => {
   sesion.consultando = true;
 
   try {
+    console.log(`📊 Consulta de abonados para el ${nodo} en proceso...`, new Date().toLocaleString());
     const rules = [{ field: 'cmNodo.nodoCmts', op: 'bw', data: nodo }];
 
     const abonados = await buscarAbonadosEnTelecentro(rules, 200);
 
     if (!abonados.length) {
       return res.status(404).json({
-        error: `No se encontraron abonados para el nodo ${nodo}`,
+        error: `❌ No se encontraron abonados para el nodo ${nodo}`,
       });
+    } else {
+      console.log(`✅ Se encontraron ${abonados.length} abonados para el nodo ${nodo}`);
     }
 
     return res.status(200).json(abonados);

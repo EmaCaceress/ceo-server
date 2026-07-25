@@ -133,6 +133,13 @@ export const getStats = async (req, res) => {
         
         const username = user.username || 'usuario desconocido';
 
+        const queryNodo = await pool.query("SELECT id, tipo FROM nodos WHERE nodo = $1", [nodo.toUpperCase()]);
+        if (!nodo) {
+            return res.status(400).json({ error: 'Debe indicar un nodo' });
+        } else if (queryNodo.rows.length === 0) {
+            return res.status(404).json({ error: `Nodo ${nodo} no encontrado` });
+        }
+
         //tunel
         const getBaseUrl = async () => {
             let result;
@@ -197,7 +204,14 @@ export const getSuscribers = async (req, res) => {
         }
         
         const username = user.username || 'usuario desconocido';
-        
+
+        const queryNodo = await pool.query("SELECT id, tipo FROM nodos WHERE nodo = $1", [nodo.toUpperCase()]);
+        if (!nodo) {
+            return res.status(400).json({ error: 'Debe indicar un nodo' });
+        } else if (queryNodo.rows.length === 0) {
+            return res.status(404).json({ error: `Nodo ${nodo} no encontrado` });
+        }
+
         //tunel
         const getBaseUrl = async () => {
             let result;
