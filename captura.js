@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 // CONFIG
 // =====================================================================
 const app = express();
-const PORT = 7000;
+const PORT = 2000;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -510,12 +510,11 @@ const parseAbonadoRow = (row) => {
  * es responsable de chequear `.consultando` y de liberarlo en el
  * `finally` con `sesion.consultando = false`.
  */
-function tomarSesionAbonados(nodo) {
-  if (!sesionesAbonados[nodo]) {
-    sesionesAbonados[nodo] = { consultando: false };
+function tomarSesionAbonados(username) {
+  if (!sesionesAbonados[username]) {
+    sesionesAbonados[username] = { consultando: false };
   }
-
-  return sesionesAbonados[nodo];
+  return sesionesAbonados[username];
 }
 
 /**
@@ -747,28 +746,21 @@ app.post('/estadisticas', async (req, res) => {
 // Suscribers en React.
 app.post('/abonados/nodo', async (req, res) => {
   const nodo = String(req.body.nodo || '').trim().toUpperCase();
-  const altura = String(req.body.altura || '').trim();
-  const idCliente = String(req.body.idCliente || '').trim();
-  const calle = String(req.body.calle || '').trim();
+  const username = req.user?.username || 'usuario desconocido';
 
   console.log('-------------------------------');
-  console.log(
-    '🔎 Búsqueda de abonados. Nodo:', nodo,
-    '| Altura:', altura || '(vacío)',
-    '| ID cliente:', idCliente || '(vacío)',
-    '| Calle:', calle || '(vacío)'
-  );
+  console.log("Consulta de", nodo, "por: ", username);
 
   if (!nodo) {
     return res.status(400).json({ error: 'Debe indicar un nodo' });
   }
 
-  // ---- Sesión por nodo (ver comentario en /estadisticas) ----
-  const sesion = tomarSesionAbonados(nodo);
+  // ---- Sesión por usuario (antes era por nodo) ----
+  const sesion = tomarSesionAbonados(username);
 
   if (sesion.consultando) {
     return res.status(429).json({
-      error: `Ya hay una consulta de abonados en curso para el nodo ${nodo}, esperá unos segundos`,
+      error: `Ya tenés una consulta de abonados en curso, esperá unos segundos`,
     });
   }
 
@@ -777,17 +769,11 @@ app.post('/abonados/nodo', async (req, res) => {
   try {
     const rules = [{ field: 'cmNodo.nodoCmts', op: 'bw', data: nodo }];
 
-    // Se agregan solo los filtros que vengan cargados — así se arma
-    // un AND dinámico sin tocar los que quedaron vacíos.
-    if (altura) rules.push({ field: 'infocliente.nro', op: 'eq', data: altura });
-    if (idCliente) rules.push({ field: 'infocliente.idcliente', op: 'eq', data: idCliente });
-    if (calle) rules.push({ field: 'infocliente.calle', op: 'cn', data: calle });
-
     const abonados = await buscarAbonadosEnTelecentro(rules, 200);
 
     if (!abonados.length) {
       return res.status(404).json({
-        error: `No se encontraron abonados para el nodo ${nodo} con esos filtros`,
+        error: `No se encontraron abonados para el nodo ${nodo}`,
       });
     }
 
@@ -802,55 +788,6 @@ app.post('/abonados/nodo', async (req, res) => {
     sesion.consultando = false;
   }
 });
-
-// Listar TODOS los abonados de un nodo (sin más filtros). Usada por el
-// botón de "Descargar planilla" del componente Suscribers, que arma la
-// planilla con todos los abonados del nodo, no solo los filtrados.
-app.get('/abonados/nodo/:nodo', async (req, res) => {
-  const nodo = String(req.params.nodo || '').trim().toUpperCase();
-
-  console.log('-------------------------------');
-  console.log('📋 Listado completo de abonados del nodo:', nodo);
-
-  if (!nodo) {
-    return res.status(400).json({ error: 'Debe indicar un nodo' });
-  }
-
-  const sesion = tomarSesionAbonados(nodo);
-
-  if (sesion.consultando) {
-    return res.status(429).json({
-      error: `Ya hay una consulta de abonados en curso para el nodo ${nodo}, esperá unos segundos`,
-    });
-  }
-
-  sesion.consultando = true;
-
-  try {
-    const rules = [{ field: 'cmNodo.nodoCmts', op: 'bw', data: nodo }];
-
-    // rows alto a propósito: acá SÍ necesitamos todos los abonados del
-    // nodo, no una página de resultados.
-    const abonados = await buscarAbonadosEnTelecentro(rules, 2000);
-
-    if (!abonados.length) {
-      return res.status(404).json({
-        error: `No se encontraron abonados para el nodo ${nodo}`,
-      });
-    }
-
-    return res.status(200).json(abonados);
-  } catch (error) {
-    console.error('❌ Error listando abonados del nodo:', error);
-
-    return res.status(500).json({
-      error: error instanceof Error ? error.message : 'Error desconocido listando abonados',
-    });
-  } finally {
-    sesion.consultando = false;
-  }
-});
-
 // =====================================================================
 // INIT / SERVER
 // =====================================================================

@@ -118,22 +118,21 @@ export const getSpectrumGraph = async (req, res) => {
 };
 
 export const getStats = async (req, res) => {
-    let nodo = req.body.nodo || "Unknown";
+    const { nodo } = req.body;
     const token = req.headers.authorization?.split(" ")[1];
     try{
         
         // Busca usuario admin_id a partir del token
         const user = (await pool.query(
-            "SELECT s.user_id, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE token = $1",
+            "SELECT s.user_id, u.username, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE token = $1",
             [token])).rows[0] || null;
     
         if (user.user_id === 0) {
             return res.status(404).json({ error: "No se encontraron usuarios" });
         }
-        function isNumber(num) {
-            return /^[0-9]+$/.test(num);
-        }
         
+        const username = user.username || 'usuario desconocido';
+
         //tunel
         const getBaseUrl = async () => {
             let result;
@@ -165,7 +164,8 @@ export const getStats = async (req, res) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                nodo
+                nodo,
+                username,
             })
         });
         
@@ -189,12 +189,14 @@ export const getSuscribers = async (req, res) => {
         
         // Busca usuario admin_id a partir del token
         const user = (await pool.query(
-            "SELECT s.user_id, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE token = $1",
+            "SELECT s.user_id, u.username, u.role FROM sessions s JOIN users u ON s.user_id = u.id WHERE token = $1",
             [token])).rows[0] || null;
     
         if (user.user_id === 0) {
             return res.status(404).json({ error: "No se encontraron usuarios" });
-        }        
+        }
+        
+        const username = user.username || 'usuario desconocido';
         
         //tunel
         const getBaseUrl = async () => {
@@ -226,7 +228,8 @@ export const getSuscribers = async (req, res) => {
                 "Content-Type": "application/json"
             },
             body: JSON.stringify({
-                nodo
+                nodo,
+                username
             })
         });
         const data = await response.json();
